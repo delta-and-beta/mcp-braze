@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mcp-braze:
+    build: .
+    container_name: mcp-braze
+    environment:
+      - BRAZE_API_KEY=${BRAZE_API_KEY}
+      - BRAZE_API_URL=${BRAZE_API_URL}
+      - BRAZE_APP_ID=${BRAZE_APP_ID}
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - mcp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: mcp-braze-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - mcp-network
+
+volumes:
+  redis-data:
+
+networks:
+  mcp-network:
+    driver: bridge
