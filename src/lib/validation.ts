@@ -36,11 +36,12 @@ export const phoneSchema = z
 
 /**
  * ISO 8601 datetime validation
+ * Matches formats like: 2024-01-15T10:30:00Z, 2024-01-15T10:30:00.123+05:00
  */
 export const isoDateTimeSchema = z
   .string()
   .regex(
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?(Z|[+-]\d{2}:\d{2})?$/,
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/,
     "Must be ISO 8601 format"
   );
 

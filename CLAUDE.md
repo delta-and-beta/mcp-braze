@@ -10,7 +10,7 @@ This is a Model Context Protocol (MCP) server that provides tools for interactin
 
 - **Runtime**: Node.js 18+
 - **Language**: TypeScript (strict mode)
-- **Framework**: FastMCP
+- **Framework**: MCP SDK (@modelcontextprotocol/sdk)
 - **Validation**: Zod
 - **Testing**: Vitest
 
@@ -18,19 +18,36 @@ This is a Model Context Protocol (MCP) server that provides tools for interactin
 
 ```
 src/
-├── index.ts              # Entry point (transport selection)
-├── server.ts             # FastMCP server initialization
-├── tools/                # Tool definitions by category
-│   ├── users.ts          # User data operations
-│   ├── messaging.ts      # Message sending/scheduling
-│   ├── campaigns.ts      # Campaign management
-│   └── exports.ts        # Data exports
-└── lib/                  # Shared utilities
+├── index.ts              # Entry point (STDIO transport)
+├── server.ts             # MCP server initialization
+├── tools/                # Tool definitions by category (92 tools across 11 categories)
+│   ├── users.ts          # User data operations (8 tools)
+│   ├── messaging.ts      # Message sending (6 tools)
+│   ├── scheduling.ts     # Campaign/Canvas scheduling (10 tools)
+│   ├── exports.ts        # Data exports (24 tools)
+│   ├── email.ts          # Email management (7 tools)
+│   ├── sms.ts            # SMS operations (2 tools)
+│   ├── subscriptions.ts  # Subscription groups (4 tools)
+│   ├── templates.ts      # Template management (8 tools)
+│   ├── catalogs.ts       # Catalog operations (13 tools)
+│   ├── preference-center.ts # Preference centers (5 tools)
+│   └── scim.ts           # SCIM user provisioning (5 tools)
+└── lib/                  # Shared utilities (15 modules)
+    ├── index.ts          # Barrel exports
     ├── auth.ts           # API key extraction
     ├── client.ts         # Braze API client
     ├── errors.ts         # Error handling
     ├── validation.ts     # Input validation
-    └── logger.ts         # Logging utilities
+    ├── logger.ts         # Logging utilities
+    ├── retry.ts          # Exponential backoff with jitter
+    ├── circuit-breaker.ts # Cascade failure prevention
+    ├── rate-limiter.ts   # Token bucket rate limiting
+    ├── cache.ts          # TTL-based caching with LRU eviction
+    ├── request-queue.ts  # Concurrency control
+    ├── deduplication.ts  # Share in-flight requests
+    ├── idempotency.ts    # Safe retry tracking
+    ├── health.ts         # Kubernetes liveness/readiness probes
+    └── sentry.ts         # Error tracking (optional)
 ```
 
 ## Commands
@@ -61,9 +78,10 @@ Set environment variables or pass via HTTP headers:
 
 ## Testing
 
-- Unit tests: `src/__tests__/unit/`
-- E2E tests: `src/__tests__/e2e/`
+- Unit tests: `src/__tests__/unit/` (154 tests across 8 files)
+- E2E tests: `src/__tests__/e2e/` (126 tests across 11 files)
 - Coverage target: 90%+ on lib/
+- Run: `npm test` (unit) or `npm run test:e2e` (requires API key)
 
 ## Braze API Reference
 

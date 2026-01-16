@@ -4,10 +4,10 @@
  */
 
 import { z } from "zod";
-import { server, type SessionData } from "../server.js";
+import { server } from "../server.js";
 import { extractApiKey, extractRestEndpoint } from "../lib/auth.js";
-import { BrazeClient } from "../lib/client.js";
-import { formatErrorResponse } from "../lib/errors.js";
+import { BrazeClient, type BrazeResponse } from "../lib/client.js";
+import { formatErrorResponse, formatSuccessResponse } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 
 const authSchema = z.object({
@@ -15,27 +15,49 @@ const authSchema = z.object({
   restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
 });
 
+interface ToolContentResponse {
+  [key: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
+}
+
+function createClient(args: { apiKey?: string; restEndpoint?: string }): BrazeClient {
+  return new BrazeClient({
+    apiKey: extractApiKey(args),
+    restEndpoint: extractRestEndpoint(args),
+  });
+}
+
+function formatResponse(result: BrazeResponse): ToolContentResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatSuccessResponse(result), null, 2) }],
+  };
+}
+
+function formatError(error: unknown, tool: string): ToolContentResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatErrorResponse(error, { tool }), null, 2) }],
+  };
+}
+
 // ========================================
 // EMAIL TEMPLATES
 // ========================================
 
-server.addTool({
-  name: "email_templates_list",
-  description: "List all email templates in the workspace.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_templates_list",
+  "List all email templates in the workspace.",
+  authSchema.extend({
     modified_after: z.string().optional().describe("Filter by modified date (ISO 8601)"),
     modified_before: z.string().optional().describe("Filter by modified date (ISO 8601)"),
     limit: z.number().optional().describe("Max results (default 100)"),
     offset: z.number().optional(),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_templates_list called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/templates/email/list", {
+      const result = await client.request<BrazeResponse>("/templates/email/list", {
         method: "GET",
         queryParams: {
           modified_after: args.modified_after,
@@ -47,59 +69,55 @@ server.addTool({
       });
 
       logger.info("email_templates_list completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_templates_list" }), null, 2);
+      return formatError(error, "email_templates_list");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "email_templates_info",
-  description: "Get details for a specific email template.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_templates_info",
+  "Get details for a specific email template.",
+  authSchema.extend({
     email_template_id: z.string().describe("Email template ID"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_templates_info called", { templateId: args.email_template_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/templates/email/info", {
+      const result = await client.request<BrazeResponse>("/templates/email/info", {
         method: "GET",
         queryParams: { email_template_id: args.email_template_id },
         context: { operation: "email_templates_info" },
       });
 
       logger.info("email_templates_info completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_templates_info" }), null, 2);
+      return formatError(error, "email_templates_info");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "email_templates_create",
-  description: "Create a new email template.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_templates_create",
+  "Create a new email template.",
+  authSchema.extend({
     template_name: z.string().describe("Template name"),
     subject: z.string().describe("Email subject line"),
     body: z.string().describe("HTML body content"),
     plaintext_body: z.string().optional().describe("Plain text body"),
     preheader: z.string().optional().describe("Email preheader text"),
     tags: z.array(z.string()).optional().describe("Tags for organization"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_templates_create called", { name: args.template_name });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/templates/email/create", {
+      const result = await client.request<BrazeResponse>("/templates/email/create", {
         body: {
           template_name: args.template_name,
           subject: args.subject,
@@ -112,17 +130,17 @@ server.addTool({
       });
 
       logger.info("email_templates_create completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_templates_create" }), null, 2);
+      return formatError(error, "email_templates_create");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "email_templates_update",
-  description: "Update an existing email template.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_templates_update",
+  "Update an existing email template.",
+  authSchema.extend({
     email_template_id: z.string().describe("Template ID to update"),
     template_name: z.string().optional().describe("New template name"),
     subject: z.string().optional().describe("New subject line"),
@@ -130,15 +148,13 @@ server.addTool({
     plaintext_body: z.string().optional().describe("New plain text body"),
     preheader: z.string().optional().describe("New preheader"),
     tags: z.array(z.string()).optional().describe("New tags"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_templates_update called", { templateId: args.email_template_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/templates/email/update", {
+      const result = await client.request<BrazeResponse>("/templates/email/update", {
         body: {
           email_template_id: args.email_template_id,
           template_name: args.template_name,
@@ -152,34 +168,32 @@ server.addTool({
       });
 
       logger.info("email_templates_update completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_templates_update" }), null, 2);
+      return formatError(error, "email_templates_update");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // CONTENT BLOCKS
 // ========================================
 
-server.addTool({
-  name: "content_blocks_list",
-  description: "List all content blocks in the workspace.",
-  parameters: authSchema.extend({
+server.tool(
+  "content_blocks_list",
+  "List all content blocks in the workspace.",
+  authSchema.extend({
     modified_after: z.string().optional().describe("Filter by modified date (ISO 8601)"),
     modified_before: z.string().optional().describe("Filter by modified date (ISO 8601)"),
     limit: z.number().optional().describe("Max results (default 100)"),
     offset: z.number().optional(),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("content_blocks_list called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/content_blocks/list", {
+      const result = await client.request<BrazeResponse>("/content_blocks/list", {
         method: "GET",
         queryParams: {
           modified_after: args.modified_after,
@@ -191,28 +205,26 @@ server.addTool({
       });
 
       logger.info("content_blocks_list completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "content_blocks_list" }), null, 2);
+      return formatError(error, "content_blocks_list");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "content_blocks_info",
-  description: "Get details for a specific content block.",
-  parameters: authSchema.extend({
+server.tool(
+  "content_blocks_info",
+  "Get details for a specific content block.",
+  authSchema.extend({
     content_block_id: z.string().describe("Content block ID"),
     include_inclusion_data: z.boolean().optional().describe("Include campaigns/canvases using this block"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("content_blocks_info called", { blockId: args.content_block_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/content_blocks/info", {
+      const result = await client.request<BrazeResponse>("/content_blocks/info", {
         method: "GET",
         queryParams: {
           content_block_id: args.content_block_id,
@@ -222,31 +234,29 @@ server.addTool({
       });
 
       logger.info("content_blocks_info completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "content_blocks_info" }), null, 2);
+      return formatError(error, "content_blocks_info");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "content_blocks_create",
-  description: "Create a new content block.",
-  parameters: authSchema.extend({
+server.tool(
+  "content_blocks_create",
+  "Create a new content block.",
+  authSchema.extend({
     name: z.string().describe("Content block name"),
     content_type: z.enum(["html", "text"]).optional().describe("Content type (default: html)"),
     content: z.string().describe("Content block HTML/text content"),
     state: z.enum(["active", "draft"]).optional().describe("Initial state"),
     tags: z.array(z.string()).optional().describe("Tags for organization"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("content_blocks_create called", { name: args.name });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/content_blocks/create", {
+      const result = await client.request<BrazeResponse>("/content_blocks/create", {
         body: {
           name: args.name,
           content_type: args.content_type,
@@ -258,31 +268,29 @@ server.addTool({
       });
 
       logger.info("content_blocks_create completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "content_blocks_create" }), null, 2);
+      return formatError(error, "content_blocks_create");
     }
-  },
-});
+  }
+);
 
-server.addTool({
-  name: "content_blocks_update",
-  description: "Update an existing content block.",
-  parameters: authSchema.extend({
+server.tool(
+  "content_blocks_update",
+  "Update an existing content block.",
+  authSchema.extend({
     content_block_id: z.string().describe("Content block ID to update"),
     name: z.string().optional().describe("New name"),
     content: z.string().optional().describe("New content"),
     state: z.enum(["active", "draft"]).optional().describe("New state"),
     tags: z.array(z.string()).optional().describe("New tags"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("content_blocks_update called", { blockId: args.content_block_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/content_blocks/update", {
+      const result = await client.request<BrazeResponse>("/content_blocks/update", {
         body: {
           content_block_id: args.content_block_id,
           name: args.name,
@@ -294,9 +302,9 @@ server.addTool({
       });
 
       logger.info("content_blocks_update completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "content_blocks_update" }), null, 2);
+      return formatError(error, "content_blocks_update");
     }
-  },
-});
+  }
+);

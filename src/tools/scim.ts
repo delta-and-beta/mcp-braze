@@ -4,107 +4,158 @@
  */
 
 import { z } from "zod";
-import { server, type SessionData } from "../server.js";
+import { server } from "../server.js";
 import { extractApiKey, extractRestEndpoint } from "../lib/auth.js";
 import { BrazeClient } from "../lib/client.js";
 import { formatErrorResponse } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+
+// ========================================
+// Types
+// ========================================
+
+interface ScimAppGroupPermission {
+  appGroupName: string;
+  appGroupPermissions?: string[];
+  team?: string[];
+}
+
+interface ScimPermissions {
+  companyPermissions?: string[];
+  appGroup?: ScimAppGroupPermission[];
+}
+
+interface ScimUserResponse {
+  id?: string;
+  userName?: string;
+  name?: { givenName?: string; familyName?: string };
+  department?: string;
+  permissions?: ScimPermissions;
+  schemas?: string[];
+  [key: string]: unknown;
+}
+
+interface ScimSearchResponse {
+  totalResults?: number;
+  itemsPerPage?: number;
+  startIndex?: number;
+  schemas?: string[];
+  Resources?: ScimUserResponse[];
+}
+
+interface ScimName {
+  givenName?: string;
+  familyName?: string;
+}
+
+interface ScimUpdateBody {
+  schemas: string[];
+  userName?: string;
+  name?: ScimName;
+  department?: string;
+  permissions?: ScimPermissions;
+  [key: string]: unknown;
+}
+
+// ========================================
+// Schemas
+// ========================================
 
 const authSchema = z.object({
   apiKey: z.string().optional().describe("Braze REST API key (requires SCIM permissions)"),
   restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
 });
 
-// SCIM user schema used for validation reference
-const _scimUserSchemaRef = z.object({
-  schemas: z.array(z.string()).optional().default(["urn:ietf:params:scim:schemas:core:2.0:User"]),
-  userName: z.string().describe("Email address of the user"),
-  name: z.object({
-    givenName: z.string().describe("First name"),
-    familyName: z.string().describe("Last name"),
-  }),
-  department: z.string().optional().describe("Department name"),
-  permissions: z.object({
-    companyPermissions: z.array(z.string()).optional(),
-    appGroup: z.array(z.object({
-      appGroupName: z.string(),
-      appGroupPermissions: z.array(z.string()).optional(),
-      team: z.array(z.string()).optional(),
-    })).optional(),
-  }).optional(),
-});
-void _scimUserSchemaRef; // Reference to avoid unused warning
+const permissionsSchema = z.object({
+  companyPermissions: z.array(z.string()).optional(),
+  appGroup: z.array(z.object({
+    appGroupName: z.string(),
+    appGroupPermissions: z.array(z.string()).optional(),
+    team: z.array(z.string()).optional(),
+  })).optional(),
+}).optional();
+
+// ========================================
+// Helpers
+// ========================================
+
+const SCIM_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User";
+
+function formatSuccessResponse(result: ScimUserResponse | ScimSearchResponse): { content: [{ type: "text"; text: string }] } {
+  return {
+    content: [{ type: "text", text: JSON.stringify({ success: true, ...result }, null, 2) }],
+  };
+}
+
+function formatToolError(error: unknown, tool: string): { content: [{ type: "text"; text: string }] } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatErrorResponse(error, { tool }), null, 2) }],
+  };
+}
 
 // ========================================
 // scim_users_search - Search dashboard users by email
 // ========================================
 
-server.addTool({
-  name: "scim_users_search",
-  description: "Search for dashboard users by email address.",
-  parameters: authSchema.extend({
+server.tool(
+  "scim_users_search",
+  "Search for dashboard users by email address.",
+  authSchema.extend({
     filter: z.string().describe("SCIM filter (e.g., 'userName eq \"user@example.com\"')"),
     startIndex: z.number().optional().describe("1-based start index"),
     count: z.number().optional().describe("Number of results to return"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("scim_users_search called", { filter: args.filter });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = new BrazeClient({
+        apiKey: extractApiKey(args),
+        restEndpoint: extractRestEndpoint(args),
+      });
 
-      const queryParams: Record<string, string | number | boolean> = {
-        filter: args.filter,
-      };
-      if (args.startIndex) queryParams.startIndex = args.startIndex;
-      if (args.count) queryParams.count = args.count;
+      const queryParams: Record<string, string | number> = { filter: args.filter };
+      if (args.startIndex !== undefined) queryParams.startIndex = args.startIndex;
+      if (args.count !== undefined) queryParams.count = args.count;
 
-      const result = await client.request("/scim/v2/Users", {
+      const result = await client.request<ScimSearchResponse>("/scim/v2/Users", {
         method: "GET",
         queryParams,
         context: { operation: "scim_users_search" },
       });
 
       logger.info("scim_users_search completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatSuccessResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "scim_users_search" }), null, 2);
+      return formatToolError(error, "scim_users_search");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // scim_users_create - Create dashboard user
 // ========================================
 
-server.addTool({
-  name: "scim_users_create",
-  description: "Create a new dashboard user account.",
-  parameters: authSchema.extend({
+server.tool(
+  "scim_users_create",
+  "Create a new dashboard user account.",
+  authSchema.extend({
     userName: z.string().describe("Email address for the new user"),
     givenName: z.string().describe("First name"),
     familyName: z.string().describe("Last name"),
     department: z.string().optional().describe("Department"),
-    permissions: z.object({
-      companyPermissions: z.array(z.string()).optional(),
-      appGroup: z.array(z.object({
-        appGroupName: z.string(),
-        appGroupPermissions: z.array(z.string()).optional(),
-        team: z.array(z.string()).optional(),
-      })).optional(),
-    }).optional().describe("User permissions"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+    permissions: permissionsSchema.describe("User permissions"),
+  }).shape,
+  async (args) => {
     try {
       logger.info("scim_users_create called", { userName: args.userName });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = new BrazeClient({
+        apiKey: extractApiKey(args),
+        restEndpoint: extractRestEndpoint(args),
+      });
 
-      const result = await client.request("/scim/v2/Users", {
+      const result = await client.request<ScimUserResponse>("/scim/v2/Users", {
         body: {
-          schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          schemas: [SCIM_SCHEMA],
           userName: args.userName,
           name: {
             givenName: args.givenName,
@@ -117,125 +168,129 @@ server.addTool({
       });
 
       logger.info("scim_users_create completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatSuccessResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "scim_users_create" }), null, 2);
+      return formatToolError(error, "scim_users_create");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // scim_users_get - Get dashboard user by ID
 // ========================================
 
-server.addTool({
-  name: "scim_users_get",
-  description: "Get a dashboard user account by SCIM ID.",
-  parameters: authSchema.extend({
+server.tool(
+  "scim_users_get",
+  "Get a dashboard user account by SCIM ID.",
+  authSchema.extend({
     user_id: z.string().describe("SCIM user ID"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("scim_users_get called", { userId: args.user_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
-
-      const result = await client.request(`/scim/v2/Users/${encodeURIComponent(args.user_id)}`, {
-        method: "GET",
-        context: { operation: "scim_users_get" },
+      const client = new BrazeClient({
+        apiKey: extractApiKey(args),
+        restEndpoint: extractRestEndpoint(args),
       });
 
+      const result = await client.request<ScimUserResponse>(
+        `/scim/v2/Users/${encodeURIComponent(args.user_id)}`,
+        {
+          method: "GET",
+          context: { operation: "scim_users_get" },
+        }
+      );
+
       logger.info("scim_users_get completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatSuccessResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "scim_users_get" }), null, 2);
+      return formatToolError(error, "scim_users_get");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // scim_users_update - Update dashboard user
 // ========================================
 
-server.addTool({
-  name: "scim_users_update",
-  description: "Update a dashboard user account.",
-  parameters: authSchema.extend({
+server.tool(
+  "scim_users_update",
+  "Update a dashboard user account.",
+  authSchema.extend({
     user_id: z.string().describe("SCIM user ID"),
     userName: z.string().optional().describe("New email address"),
     givenName: z.string().optional().describe("New first name"),
     familyName: z.string().optional().describe("New last name"),
     department: z.string().optional().describe("New department"),
-    permissions: z.object({
-      companyPermissions: z.array(z.string()).optional(),
-      appGroup: z.array(z.object({
-        appGroupName: z.string(),
-        appGroupPermissions: z.array(z.string()).optional(),
-        team: z.array(z.string()).optional(),
-      })).optional(),
-    }).optional().describe("New permissions"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+    permissions: permissionsSchema.describe("New permissions"),
+  }).shape,
+  async (args) => {
     try {
       logger.info("scim_users_update called", { userId: args.user_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = new BrazeClient({
+        apiKey: extractApiKey(args),
+        restEndpoint: extractRestEndpoint(args),
+      });
 
-      const body: Record<string, unknown> = {
-        schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
-      };
+      const body: ScimUpdateBody = { schemas: [SCIM_SCHEMA] };
 
       if (args.userName) body.userName = args.userName;
       if (args.givenName || args.familyName) {
-        body.name = {};
-        if (args.givenName) (body.name as Record<string, string>).givenName = args.givenName;
-        if (args.familyName) (body.name as Record<string, string>).familyName = args.familyName;
+        body.name = {
+          givenName: args.givenName,
+          familyName: args.familyName,
+        };
       }
       if (args.department) body.department = args.department;
       if (args.permissions) body.permissions = args.permissions;
 
-      const result = await client.request(`/scim/v2/Users/${encodeURIComponent(args.user_id)}`, {
-        method: "PUT",
-        body,
-        context: { operation: "scim_users_update" },
-      });
+      const result = await client.request<ScimUserResponse>(
+        `/scim/v2/Users/${encodeURIComponent(args.user_id)}`,
+        {
+          method: "PUT",
+          body,
+          context: { operation: "scim_users_update" },
+        }
+      );
 
       logger.info("scim_users_update completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatSuccessResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "scim_users_update" }), null, 2);
+      return formatToolError(error, "scim_users_update");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // scim_users_delete - Delete dashboard user
 // ========================================
 
-server.addTool({
-  name: "scim_users_delete",
-  description: "Delete a dashboard user account. This is permanent.",
-  parameters: authSchema.extend({
+server.tool(
+  "scim_users_delete",
+  "Delete a dashboard user account. This is permanent.",
+  authSchema.extend({
     user_id: z.string().describe("SCIM user ID to delete"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("scim_users_delete called", { userId: args.user_id });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
-
-      const result = await client.request(`/scim/v2/Users/${encodeURIComponent(args.user_id)}`, {
-        method: "DELETE",
-        context: { operation: "scim_users_delete" },
+      const client = new BrazeClient({
+        apiKey: extractApiKey(args),
+        restEndpoint: extractRestEndpoint(args),
       });
 
+      const result = await client.request<ScimUserResponse>(
+        `/scim/v2/Users/${encodeURIComponent(args.user_id)}`,
+        {
+          method: "DELETE",
+          context: { operation: "scim_users_delete" },
+        }
+      );
+
       logger.info("scim_users_delete completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatSuccessResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "scim_users_delete" }), null, 2);
+      return formatToolError(error, "scim_users_delete");
     }
-  },
-});
+  }
+);

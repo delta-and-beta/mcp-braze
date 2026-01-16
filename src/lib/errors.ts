@@ -63,37 +63,62 @@ export class NotFoundError extends BrazeError {
   }
 }
 
+export class TimeoutError extends BrazeError {
+  public readonly timeoutMs: number;
+  public readonly url?: string;
+
+  constructor(message: string, timeoutMs: number, url?: string, context?: ErrorContext) {
+    super(message, "TIMEOUT_ERROR", 408, context);
+    this.name = "TimeoutError";
+    this.timeoutMs = timeoutMs;
+    this.url = url;
+  }
+}
+
+export interface ErrorDetails {
+  name: string;
+  code: string;
+  message: string;
+  statusCode?: number;
+  context?: ErrorContext;
+}
+
 export interface FormattedError {
   success: false;
-  error: {
-    name: string;
-    code: string;
-    message: string;
-    statusCode?: number;
-    context?: ErrorContext;
-  };
+  error: ErrorDetails;
+}
+
+export interface FormattedSuccess<T = unknown> {
+  success: true;
+  data?: T;
+  [key: string]: unknown;
 }
 
 /**
- * Format a successful response
+ * Format a successful response by wrapping the result with success: true.
+ * If result is an object, spreads its properties into the response.
+ * Otherwise, wraps the result in a data property.
  */
-export function formatSuccessResponse(result: unknown): object {
-  if (result && typeof result === "object") {
+export function formatSuccessResponse<T>(result: T): FormattedSuccess<T> {
+  if (result !== null && typeof result === "object" && !Array.isArray(result)) {
     return { success: true, ...(result as Record<string, unknown>) };
   }
   return { success: true, data: result };
 }
 
+/**
+ * Format an error into a standardized response structure.
+ * Handles BrazeError subclasses, standard Error instances, and unknown types.
+ * Logs all errors with appropriate context for debugging.
+ */
 export function formatErrorResponse(
   error: unknown,
   context?: ErrorContext
 ): FormattedError {
-  const mergedContext = context;
-
   if (error instanceof BrazeError) {
     logger.error("Braze API error", error, {
       code: error.code,
-      ...mergedContext,
+      ...context,
     });
     return {
       success: false,
@@ -102,27 +127,27 @@ export function formatErrorResponse(
         code: error.code,
         message: error.message,
         statusCode: error.statusCode,
-        context: { ...error.context, ...mergedContext },
+        context: { ...error.context, ...context },
       },
     };
   }
 
   if (error instanceof Error) {
-    logger.error("Unexpected error", error, mergedContext);
+    logger.error("Unexpected error", error, context);
     return {
       success: false,
       error: {
         name: error.name,
         code: "UNKNOWN_ERROR",
         message: error.message,
-        context: mergedContext,
+        context,
       },
     };
   }
 
   logger.error("Unknown error type", undefined, {
     error: String(error),
-    ...mergedContext,
+    ...context,
   });
   return {
     success: false,
@@ -130,7 +155,7 @@ export function formatErrorResponse(
       name: "UnknownError",
       code: "UNKNOWN_ERROR",
       message: String(error),
-      context: mergedContext,
+      context,
     },
   };
 }

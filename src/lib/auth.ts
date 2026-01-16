@@ -21,58 +21,55 @@ interface AuthArgs {
 }
 
 /**
+ * Extract a single string value from a header that may be string, string[], or undefined.
+ */
+function getHeaderValue(
+  headers: SessionHeaders,
+  headerName: string
+): string | undefined {
+  const value = headers[headerName];
+  if (!value) {
+    return undefined;
+  }
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
  * Extract API key from multiple sources with priority:
  * 1. Tool parameter (explicit)
- * 2. HTTP headers via session (x-api-key or Authorization: Bearer)
+ * 2. HTTP headers via session (x-api-key, x-braze-api-key, or Authorization: Bearer)
  * 3. Environment variable
  */
 export function extractApiKey(
   args: AuthArgs,
   context?: SessionContext
 ): string {
-  // Priority 1: Tool parameter
   if (args.apiKey) {
     logger.debug("Using API key from tool parameter");
     return args.apiKey;
   }
 
-  // Priority 2: HTTP headers via session
   const headers = context?.session?.headers;
   if (headers) {
-    // Check x-api-key header
-    const apiKeyHeader = headers["x-api-key"];
-    if (apiKeyHeader) {
-      const key = Array.isArray(apiKeyHeader) ? apiKeyHeader[0] : apiKeyHeader;
-      if (key) {
-        logger.debug("Using API key from x-api-key header");
-        return key;
-      }
+    const apiKey = getHeaderValue(headers, "x-api-key");
+    if (apiKey) {
+      logger.debug("Using API key from x-api-key header");
+      return apiKey;
     }
 
-    // Check x-braze-api-key header (Braze-specific)
-    const brazeApiKeyHeader = headers["x-braze-api-key"];
-    if (brazeApiKeyHeader) {
-      const key = Array.isArray(brazeApiKeyHeader)
-        ? brazeApiKeyHeader[0]
-        : brazeApiKeyHeader;
-      if (key) {
-        logger.debug("Using API key from x-braze-api-key header");
-        return key;
-      }
+    const brazeApiKey = getHeaderValue(headers, "x-braze-api-key");
+    if (brazeApiKey) {
+      logger.debug("Using API key from x-braze-api-key header");
+      return brazeApiKey;
     }
 
-    // Check Authorization header
-    const authHeader = headers["authorization"];
-    if (authHeader) {
-      const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-      if (auth?.startsWith("Bearer ")) {
-        logger.debug("Using API key from Authorization header");
-        return auth.substring(7);
-      }
+    const authHeader = getHeaderValue(headers, "authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      logger.debug("Using API key from Authorization header");
+      return authHeader.substring(7);
     }
   }
 
-  // Priority 3: Environment variable
   if (process.env.BRAZE_API_KEY) {
     logger.debug("Using API key from environment variable");
     return process.env.BRAZE_API_KEY;
@@ -83,10 +80,12 @@ export function extractApiKey(
   );
 }
 
+const DEFAULT_REST_ENDPOINT = "https://rest.iad-01.braze.com";
+
 /**
  * Extract REST endpoint from multiple sources with priority:
  * 1. Tool parameter (explicit)
- * 2. HTTP headers via session
+ * 2. HTTP headers via session (x-braze-rest-endpoint)
  * 3. Environment variable
  * 4. Default (US-01)
  */
@@ -94,60 +93,29 @@ export function extractRestEndpoint(
   args: AuthArgs,
   context?: SessionContext
 ): string {
-  // Priority 1: Tool parameter
   if (args.restEndpoint) {
     return normalizeEndpoint(args.restEndpoint);
   }
 
-  // Priority 2: HTTP headers via session
   const headers = context?.session?.headers;
   if (headers) {
-    const endpointHeader = headers["x-braze-rest-endpoint"];
-    if (endpointHeader) {
-      const endpoint = Array.isArray(endpointHeader)
-        ? endpointHeader[0]
-        : endpointHeader;
-      if (endpoint) {
-        return normalizeEndpoint(endpoint);
-      }
+    const endpoint = getHeaderValue(headers, "x-braze-rest-endpoint");
+    if (endpoint) {
+      return normalizeEndpoint(endpoint);
     }
   }
 
-  // Priority 3: Environment variable
   if (process.env.BRAZE_REST_ENDPOINT) {
     return normalizeEndpoint(process.env.BRAZE_REST_ENDPOINT);
   }
 
-  // Priority 4: Default to US-01
   logger.debug("Using default REST endpoint (US-01)");
-  return "https://rest.iad-01.braze.com";
+  return DEFAULT_REST_ENDPOINT;
 }
 
 /**
- * Normalize endpoint URL (remove trailing slash)
+ * Normalize endpoint URL by removing trailing slashes.
  */
 function normalizeEndpoint(endpoint: string): string {
   return endpoint.replace(/\/+$/, "");
-}
-
-/**
- * Extract App ID from multiple sources
- */
-export function extractAppId(
-  args: { appId?: string },
-  context?: SessionContext
-): string | undefined {
-  if (args.appId) {
-    return args.appId;
-  }
-
-  const headers = context?.session?.headers;
-  if (headers) {
-    const appIdHeader = headers["x-braze-app-id"];
-    if (appIdHeader) {
-      return Array.isArray(appIdHeader) ? appIdHeader[0] : appIdHeader;
-    }
-  }
-
-  return process.env.BRAZE_APP_ID;
 }

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * MCP Braze Server Entry Point
- * 90 tools across 11 categories
+ * 92 tools across 11 categories
  */
 
 import "dotenv/config";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { server } from "./server.js";
 import { logger } from "./lib/logger.js";
 
@@ -21,22 +22,16 @@ import "./tools/catalogs.js";        // 13 tools
 import "./tools/preference-center.js"; // 5 tools
 import "./tools/scim.js";            // 5 tools
 
-// Start server based on transport type
-const transport = process.env.MCP_TRANSPORT || "stdio";
-
-if (transport === "stdio") {
+async function main() {
   logger.info("Starting MCP Braze server with STDIO transport");
-  server.start({
-    transportType: "stdio",
-  });
-} else if (transport === "http") {
-  const port = parseInt(process.env.PORT || "3000", 10);
-  logger.info("Starting MCP Braze server with HTTP transport", { port });
-  server.start({
-    transportType: "httpStream",
-    httpStream: { port, endpoint: "/mcp" },
-  });
-} else {
-  logger.error("Unknown transport type", undefined, { transport });
-  process.exit(1);
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  logger.info("MCP Braze server connected and ready");
 }
+
+main().catch((error) => {
+  logger.error("Failed to start MCP Braze server", error);
+  process.exit(1);
+});

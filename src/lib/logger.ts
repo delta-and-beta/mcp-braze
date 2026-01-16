@@ -17,8 +17,16 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 4,
 };
 
-const currentLevel: LogLevel =
-  (process.env.LOG_LEVEL as LogLevel) || "info";
+function isValidLogLevel(level: string | undefined): level is LogLevel {
+  return level !== undefined && level in LOG_LEVELS;
+}
+
+function getLogLevel(): LogLevel {
+  const envLevel = process.env.LOG_LEVEL;
+  return isValidLogLevel(envLevel) ? envLevel : "info";
+}
+
+const currentLevel: LogLevel = getLogLevel();
 
 function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
@@ -36,38 +44,51 @@ function formatMessage(
 
 function log(level: LogLevel, message: string, metadata?: LogMetadata): void {
   if (!shouldLog(level)) return;
-  // Use stderr for STDIO transport compatibility
   console.error(formatMessage(level, message, metadata));
 }
 
+function trace(message: string, metadata?: LogMetadata): void {
+  log("trace", message, metadata);
+}
+
+function debug(message: string, metadata?: LogMetadata): void {
+  log("debug", message, metadata);
+}
+
+function info(message: string, metadata?: LogMetadata): void {
+  log("info", message, metadata);
+}
+
+function warn(message: string, metadata?: LogMetadata): void {
+  log("warn", message, metadata);
+}
+
+function error(message: string, err?: Error, metadata?: LogMetadata): void {
+  const errorMeta: LogMetadata = err
+    ? {
+        ...metadata,
+        errorMessage: err.message,
+        errorName: err.name,
+        stack: err.stack,
+      }
+    : metadata ?? {};
+  log("error", message, errorMeta);
+}
+
+function enter(functionName: string, params?: LogMetadata): void {
+  log("debug", `ENTER ${functionName}`, params);
+}
+
+function exit(functionName: string, result?: LogMetadata): void {
+  log("debug", `EXIT ${functionName}`, result);
+}
+
 export const logger = {
-  trace: (message: string, metadata?: LogMetadata) =>
-    log("trace", message, metadata),
-
-  debug: (message: string, metadata?: LogMetadata) =>
-    log("debug", message, metadata),
-
-  info: (message: string, metadata?: LogMetadata) =>
-    log("info", message, metadata),
-
-  warn: (message: string, metadata?: LogMetadata) =>
-    log("warn", message, metadata),
-
-  error: (message: string, error?: Error, metadata?: LogMetadata) => {
-    const errorMeta: LogMetadata = {
-      ...metadata,
-      ...(error && {
-        errorMessage: error.message,
-        errorName: error.name,
-        stack: error.stack,
-      }),
-    };
-    log("error", message, errorMeta);
-  },
-
-  enter: (functionName: string, params?: LogMetadata) =>
-    log("debug", `ENTER ${functionName}`, params),
-
-  exit: (functionName: string, result?: LogMetadata) =>
-    log("debug", `EXIT ${functionName}`, result),
+  trace,
+  debug,
+  info,
+  warn,
+  error,
+  enter,
+  exit,
 };

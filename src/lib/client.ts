@@ -113,7 +113,7 @@ export class BrazeClient {
 
     if (queryParams) {
       Object.entries(queryParams).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (value !== undefined) {
           url.searchParams.append(key, String(value));
         }
       });
@@ -237,7 +237,7 @@ export class BrazeClient {
    */
   async messagesSend(params: MessagesSendParams): Promise<MessagesSendResponse> {
     return this.request<MessagesSendResponse>("/messages/send", {
-      body: params as unknown as Record<string, unknown>,
+      body: params as Record<string, unknown>,
       context: { operation: "messages_send" },
     });
   }
@@ -342,7 +342,7 @@ export class BrazeClient {
   }): Promise<CampaignsListResponse> {
     return this.request<CampaignsListResponse>("/campaigns/list", {
       method: "GET",
-      queryParams: params as Record<string, string | number | boolean>,
+      queryParams: params,
       context: { operation: "campaigns_list" },
     });
   }
@@ -371,7 +371,7 @@ export class BrazeClient {
   }): Promise<SegmentsListResponse> {
     return this.request<SegmentsListResponse>("/segments/list", {
       method: "GET",
-      queryParams: params as Record<string, string | number | boolean>,
+      queryParams: params,
       context: { operation: "segments_list" },
     });
   }
@@ -409,6 +409,7 @@ export class BrazeClient {
   }
 
   /**
+   * Export DAU (Daily Active Users) data
    * GET /kpi/dau/data_series
    */
   async kpiDauDataSeries(params: {

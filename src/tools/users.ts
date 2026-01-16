@@ -3,9 +3,9 @@
  */
 
 import { z } from "zod";
-import { server, type SessionData } from "../server.js";
+import { server } from "../server.js";
 import { extractApiKey, extractRestEndpoint } from "../lib/auth.js";
-import { BrazeClient, type UserAlias } from "../lib/client.js";
+import { BrazeClient } from "../lib/client.js";
 import { formatErrorResponse } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { BATCH_LIMITS, validateBatchSize } from "../lib/validation.js";
@@ -16,20 +16,47 @@ const userAliasSchema = z.object({
   alias_label: z.string().min(1),
 });
 
-const authSchema = z.object({
-  apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
-  restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
-});
+// Response type for API calls that return a message with optional additional fields
+interface ApiMessageResponse {
+  message?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Creates a standardized JSON response for MCP tools
+ */
+function createResponse(data: Record<string, unknown>): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+  };
+}
+
+/**
+ * Creates a standardized success response for MCP tools
+ */
+function createSuccessResponse(data: Record<string, unknown>): { content: Array<{ type: "text"; text: string }> } {
+  return createResponse({ success: true, ...data });
+}
+
+/**
+ * Creates a standardized error response for MCP tools
+ */
+function createErrorResponse(error: unknown, toolName: string): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatErrorResponse(error, { tool: toolName }), null, 2) }],
+  };
+}
 
 // ========================================
 // users_track - Track user attributes, events, purchases
 // ========================================
 
-server.addTool({
-  name: "users_track",
-  description:
-    "Track user data including attributes, custom events, and purchases. Use this to update user profiles, log events, and record purchases in Braze.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_track",
+  "Track user data including attributes, custom events, and purchases. Use this to update user profiles, log events, and record purchases in Braze.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     attributes: z
       .array(
         z.object({
@@ -71,8 +98,8 @@ server.addTool({
       )
       .optional()
       .describe("Purchase events to record"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_track called", {
         attributeCount: args.attributes?.length || 0,
@@ -80,8 +107,8 @@ server.addTool({
         purchaseCount: args.purchases?.length || 0,
       });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
       // Validate batch sizes
@@ -101,32 +128,28 @@ server.addTool({
         purchasesProcessed: result.purchases_processed,
       });
 
-      return JSON.stringify(
-        {
-          success: true,
-          attributes_processed: result.attributes_processed,
-          events_processed: result.events_processed,
-          purchases_processed: result.purchases_processed,
-          message: result.message,
-        },
-        null,
-        2
-      );
+      return createSuccessResponse({
+        attributes_processed: result.attributes_processed,
+        events_processed: result.events_processed,
+        purchases_processed: result.purchases_processed,
+        message: result.message,
+      });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_track" }), null, 2);
+      return createErrorResponse(error, "users_track");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_identify - Identify users with aliases
 // ========================================
 
-server.addTool({
-  name: "users_identify",
-  description:
-    "Identify an alias-only user profile with an external_id. This merges the alias profile into the identified user.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_identify",
+  "Identify an alias-only user profile with an external_id. This merges the alias profile into the identified user.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     aliases_to_identify: z
       .array(
         z.object({
@@ -137,13 +160,13 @@ server.addTool({
       .min(1)
       .max(50)
       .describe("Array of alias-to-external-id mappings"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_identify called", { count: args.aliases_to_identify.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
       const result = await client.usersIdentify({
@@ -152,28 +175,23 @@ server.addTool({
 
       logger.info("users_identify completed");
 
-      return JSON.stringify(
-        {
-          success: true,
-          message: result.message,
-        },
-        null,
-        2
-      );
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_identify" }), null, 2);
+      return createErrorResponse(error, "users_identify");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_alias_new - Create new user aliases
 // ========================================
 
-server.addTool({
-  name: "users_alias_new",
-  description: "Create new user aliases for existing users or create alias-only profiles.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_alias_new",
+  "Create new user aliases for existing users or create alias-only profiles.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     user_aliases: z
       .array(
         z.object({
@@ -185,13 +203,13 @@ server.addTool({
       .min(1)
       .max(50)
       .describe("Array of user aliases to create"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_alias_new called", { count: args.user_aliases.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
       const result = await client.usersAliasNew({
@@ -200,37 +218,31 @@ server.addTool({
 
       logger.info("users_alias_new completed");
 
-      return JSON.stringify(
-        {
-          success: true,
-          message: result.message,
-        },
-        null,
-        2
-      );
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_alias_new" }), null, 2);
+      return createErrorResponse(error, "users_alias_new");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_delete - Delete user profiles
 // ========================================
 
-server.addTool({
-  name: "users_delete",
-  description:
-    "Delete user profiles from Braze. This is permanent and cannot be undone. Use for GDPR/CCPA compliance.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_delete",
+  "Delete user profiles from Braze. This is permanent and cannot be undone. Use for GDPR/CCPA compliance.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     external_ids: z
       .array(z.string())
       .optional()
       .describe("External IDs of users to delete"),
     user_aliases: z.array(userAliasSchema).optional().describe("User aliases to delete"),
     braze_ids: z.array(z.string()).optional().describe("Braze IDs of users to delete"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       const totalUsers =
         (args.external_ids?.length || 0) +
@@ -240,11 +252,7 @@ server.addTool({
       logger.info("users_delete called", { totalUsers });
 
       if (totalUsers === 0) {
-        return JSON.stringify(
-          { success: false, error: "At least one user identifier is required" },
-          null,
-          2
-        );
+        return createResponse({ success: false, error: "At least one user identifier is required" });
       }
 
       validateBatchSize(
@@ -253,42 +261,35 @@ server.addTool({
         "users_delete"
       );
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
       const result = await client.usersDelete({
         external_ids: args.external_ids,
-        user_aliases: args.user_aliases as UserAlias[],
+        user_aliases: args.user_aliases,
         braze_ids: args.braze_ids,
       });
 
       logger.info("users_delete completed", { deleted: result.deleted });
 
-      return JSON.stringify(
-        {
-          success: true,
-          deleted: result.deleted,
-          message: result.message,
-        },
-        null,
-        2
-      );
+      return createSuccessResponse({ deleted: result.deleted, message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_delete" }), null, 2);
+      return createErrorResponse(error, "users_delete");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_merge - Merge user profiles
 // ========================================
 
-server.addTool({
-  name: "users_merge",
-  description:
-    "Merge one user profile into another. Data from the merged user will be combined into the target user.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_merge",
+  "Merge one user profile into another. Data from the merged user will be combined into the target user.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     merge_updates: z
       .array(
         z.object({
@@ -305,52 +306,38 @@ server.addTool({
       .min(1)
       .max(50)
       .describe("Array of merge operations"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_merge called", { count: args.merge_updates.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
       const result = await client.usersMerge({
-        merge_updates: args.merge_updates.map((mu) => ({
-          identifier_to_merge: {
-            external_id: mu.identifier_to_merge.external_id,
-            user_alias: mu.identifier_to_merge.user_alias as UserAlias,
-          },
-          identifier_to_keep: {
-            external_id: mu.identifier_to_keep.external_id,
-            user_alias: mu.identifier_to_keep.user_alias as UserAlias,
-          },
-        })),
+        merge_updates: args.merge_updates,
       });
 
       logger.info("users_merge completed");
 
-      return JSON.stringify(
-        {
-          success: true,
-          message: result.message,
-        },
-        null,
-        2
-      );
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_merge" }), null, 2);
+      return createErrorResponse(error, "users_merge");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_alias_update - Update existing user alias
 // ========================================
 
-server.addTool({
-  name: "users_alias_update",
-  description: "Update existing user aliases. Changes the alias_name for a given alias_label.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_alias_update",
+  "Update existing user aliases. Changes the alias_name for a given alias_label.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     alias_updates: z
       .array(
         z.object({
@@ -362,37 +349,39 @@ server.addTool({
       .min(1)
       .max(50)
       .describe("Array of alias updates"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_alias_update called", { count: args.alias_updates.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/users/alias/update", {
+      const result = await client.request<ApiMessageResponse>("/users/alias/update", {
         body: { alias_updates: args.alias_updates },
         context: { operation: "users_alias_update" },
       });
 
       logger.info("users_alias_update completed");
 
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_alias_update" }), null, 2);
+      return createErrorResponse(error, "users_alias_update");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_external_id_rename - Rename external IDs
 // ========================================
 
-server.addTool({
-  name: "users_external_id_rename",
-  description: "Rename external IDs for users. Use for migrating to a new ID scheme.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_external_id_rename",
+  "Rename external IDs for users. Use for migrating to a new ID scheme.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     external_id_renames: z
       .array(
         z.object({
@@ -403,61 +392,63 @@ server.addTool({
       .min(1)
       .max(50)
       .describe("Array of external ID renames"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_external_id_rename called", { count: args.external_id_renames.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/users/external_ids/rename", {
+      const result = await client.request<ApiMessageResponse>("/users/external_ids/rename", {
         body: { external_id_renames: args.external_id_renames },
         context: { operation: "users_external_id_rename" },
       });
 
       logger.info("users_external_id_rename completed");
 
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_external_id_rename" }), null, 2);
+      return createErrorResponse(error, "users_external_id_rename");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // users_external_id_remove - Remove deprecated external IDs
 // ========================================
 
-server.addTool({
-  name: "users_external_id_remove",
-  description: "Remove deprecated external IDs that were previously renamed. Cleans up old ID references.",
-  parameters: authSchema.extend({
+server.tool(
+  "users_external_id_remove",
+  "Remove deprecated external IDs that were previously renamed. Cleans up old ID references.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key (optional if set via env/header)"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     external_ids: z
       .array(z.string())
       .min(1)
       .max(50)
       .describe("Array of deprecated external IDs to remove"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("users_external_id_remove called", { count: args.external_ids.length });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/users/external_ids/remove", {
+      const result = await client.request<ApiMessageResponse>("/users/external_ids/remove", {
         body: { external_ids: args.external_ids },
         context: { operation: "users_external_id_remove" },
       });
 
       logger.info("users_external_id_remove completed");
 
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return createSuccessResponse({ message: result.message });
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "users_external_id_remove" }), null, 2);
+      return createErrorResponse(error, "users_external_id_remove");
     }
-  },
-});
+  }
+);

@@ -4,10 +4,10 @@
  */
 
 import { z } from "zod";
-import { server, type SessionData } from "../server.js";
+import { server } from "../server.js";
 import { extractApiKey, extractRestEndpoint } from "../lib/auth.js";
-import { BrazeClient } from "../lib/client.js";
-import { formatErrorResponse } from "../lib/errors.js";
+import { BrazeClient, type BrazeResponse } from "../lib/client.js";
+import { formatErrorResponse, formatSuccessResponse } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 
 const authSchema = z.object({
@@ -15,28 +15,49 @@ const authSchema = z.object({
   restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
 });
 
+interface ToolContentResponse {
+  [key: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
+}
+
+function createClient(args: { apiKey?: string; restEndpoint?: string }): BrazeClient {
+  const apiKey = extractApiKey(args);
+  const restEndpoint = extractRestEndpoint(args);
+  return new BrazeClient({ apiKey, restEndpoint });
+}
+
+function formatResponse(result: BrazeResponse): ToolContentResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatSuccessResponse(result), null, 2) }],
+  };
+}
+
+function formatError(error: unknown, tool: string): ToolContentResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatErrorResponse(error, { tool }), null, 2) }],
+  };
+}
+
 // ========================================
 // email_hard_bounces - Query hard bounced emails
 // ========================================
 
-server.addTool({
-  name: "email_hard_bounces",
-  description: "Query emails that have hard bounced within a date range.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_hard_bounces",
+  "Query emails that have hard bounced within a date range.",
+  authSchema.extend({
     start_date: z.string().optional().describe("Start date (YYYY-MM-DD)"),
     end_date: z.string().optional().describe("End date (YYYY-MM-DD)"),
     limit: z.number().optional().describe("Max results (default 100, max 500)"),
     offset: z.number().optional().describe("Offset for pagination"),
     email: z.string().optional().describe("Filter by specific email"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_hard_bounces called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/email/hard_bounces", {
+      const result = await client.request<BrazeResponse>("/email/hard_bounces", {
         method: "GET",
         queryParams: {
           start_date: args.start_date,
@@ -49,36 +70,34 @@ server.addTool({
       });
 
       logger.info("email_hard_bounces completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_hard_bounces" }), null, 2);
+      return formatError(error, "email_hard_bounces");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_unsubscribes - Query unsubscribed emails
 // ========================================
 
-server.addTool({
-  name: "email_unsubscribes",
-  description: "Query emails that have unsubscribed within a date range.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_unsubscribes",
+  "Query emails that have unsubscribed within a date range.",
+  authSchema.extend({
     start_date: z.string().optional().describe("Start date (YYYY-MM-DD)"),
     end_date: z.string().optional().describe("End date (YYYY-MM-DD)"),
     limit: z.number().optional().describe("Max results (default 100, max 500)"),
     offset: z.number().optional().describe("Offset for pagination"),
     sort_direction: z.enum(["asc", "desc"]).optional(),
     email: z.string().optional().describe("Filter by specific email"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_unsubscribes called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/email/unsubscribes", {
+      const result = await client.request<BrazeResponse>("/email/unsubscribes", {
         method: "GET",
         queryParams: {
           start_date: args.start_date,
@@ -92,32 +111,30 @@ server.addTool({
       });
 
       logger.info("email_unsubscribes completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_unsubscribes" }), null, 2);
+      return formatError(error, "email_unsubscribes");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_subscription_status - Change subscription status
 // ========================================
 
-server.addTool({
-  name: "email_subscription_status",
-  description: "Change email subscription status for users.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_subscription_status",
+  "Change email subscription status for users.",
+  authSchema.extend({
     email: z.string().describe("Email address to update"),
     subscription_state: z.enum(["subscribed", "unsubscribed", "opted_in"]).describe("New subscription state"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_subscription_status called", { email: args.email });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/email/status", {
+      const result = await client.request<BrazeResponse>("/email/status", {
         body: {
           email: args.email,
           subscription_state: args.subscription_state,
@@ -126,139 +143,131 @@ server.addTool({
       });
 
       logger.info("email_subscription_status completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_subscription_status" }), null, 2);
+      return formatError(error, "email_subscription_status");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_bounce_remove - Remove from hard bounce list
 // ========================================
 
-server.addTool({
-  name: "email_bounce_remove",
-  description: "Remove email addresses from the hard bounce list.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_bounce_remove",
+  "Remove email addresses from the hard bounce list.",
+  authSchema.extend({
     email: z.string().optional().describe("Single email to remove"),
     emails: z.array(z.string()).optional().describe("Multiple emails to remove (max 50)"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_bounce_remove called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const body: Record<string, unknown> = {};
+      const body: Record<string, string | string[]> = {};
       if (args.email) body.email = args.email;
       if (args.emails) body.emails = args.emails;
 
-      const result = await client.request("/email/bounce/remove", {
+      const result = await client.request<BrazeResponse>("/email/bounce/remove", {
         body,
         context: { operation: "email_bounce_remove" },
       });
 
       logger.info("email_bounce_remove completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_bounce_remove" }), null, 2);
+      return formatError(error, "email_bounce_remove");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_spam_remove - Remove from spam list
 // ========================================
 
-server.addTool({
-  name: "email_spam_remove",
-  description: "Remove email addresses from the spam list.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_spam_remove",
+  "Remove email addresses from the spam list.",
+  authSchema.extend({
     email: z.string().optional().describe("Single email to remove"),
     emails: z.array(z.string()).optional().describe("Multiple emails to remove (max 50)"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_spam_remove called");
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const body: Record<string, unknown> = {};
+      const body: Record<string, string | string[]> = {};
       if (args.email) body.email = args.email;
       if (args.emails) body.emails = args.emails;
 
-      const result = await client.request("/email/spam/remove", {
+      const result = await client.request<BrazeResponse>("/email/spam/remove", {
         body,
         context: { operation: "email_spam_remove" },
       });
 
       logger.info("email_spam_remove completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_spam_remove" }), null, 2);
+      return formatError(error, "email_spam_remove");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_blocklist - Add to blocklist
 // ========================================
 
-server.addTool({
-  name: "email_blocklist",
-  description: "Add email addresses to the blocklist. Blocked emails will not receive any messages.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_blocklist",
+  "Add email addresses to the blocklist. Blocked emails will not receive any messages.",
+  authSchema.extend({
     email: z.array(z.string()).describe("Email addresses to blocklist (max 50)"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_blocklist called", { count: args.email.length });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/email/blocklist", {
+      const result = await client.request<BrazeResponse>("/email/blocklist", {
         body: { email: args.email },
         context: { operation: "email_blocklist" },
       });
 
       logger.info("email_blocklist completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_blocklist" }), null, 2);
+      return formatError(error, "email_blocklist");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // email_blacklist - Add to blacklist (deprecated, use blocklist)
 // ========================================
 
-server.addTool({
-  name: "email_blacklist",
-  description: "[DEPRECATED: Use email_blocklist] Add email addresses to the blacklist.",
-  parameters: authSchema.extend({
+server.tool(
+  "email_blacklist",
+  "[DEPRECATED: Use email_blocklist] Add email addresses to the blacklist.",
+  authSchema.extend({
     email: z.array(z.string()).describe("Email addresses to blacklist"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  }).shape,
+  async (args) => {
     try {
       logger.info("email_blacklist called (deprecated)", { count: args.email.length });
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
-      const client = new BrazeClient({ apiKey, restEndpoint });
+      const client = createClient(args);
 
-      const result = await client.request("/email/blacklist", {
+      const result = await client.request<BrazeResponse>("/email/blacklist", {
         body: { email: args.email },
         context: { operation: "email_blacklist" },
       });
 
       logger.info("email_blacklist completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "email_blacklist" }), null, 2);
+      return formatError(error, "email_blacklist");
     }
-  },
-});
+  }
+);

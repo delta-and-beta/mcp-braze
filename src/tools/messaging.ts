@@ -5,10 +5,10 @@
  */
 
 import { z } from "zod";
-import { server, type SessionData } from "../server.js";
+import { server } from "../server.js";
 import { extractApiKey, extractRestEndpoint } from "../lib/auth.js";
-import { BrazeClient } from "../lib/client.js";
-import { formatErrorResponse } from "../lib/errors.js";
+import { BrazeClient, type BrazeResponse } from "../lib/client.js";
+import { formatErrorResponse, formatSuccessResponse } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 
 const userAliasSchema = z.object({
@@ -16,15 +16,31 @@ const userAliasSchema = z.object({
   alias_label: z.string().min(1),
 });
 
-const authSchema = z.object({
-  apiKey: z.string().optional().describe("Braze REST API key"),
-  restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
-});
 
-const audienceSchema = z.object({
-  AND: z.array(z.record(z.unknown())).optional(),
-  OR: z.array(z.record(z.unknown())).optional(),
-}).optional();
+const audienceSchema = z
+  .object({
+    AND: z.array(z.record(z.unknown())).optional(),
+    OR: z.array(z.record(z.unknown())).optional(),
+  })
+  .optional();
+
+/**
+ * Helper to format API results into MCP tool response format
+ */
+function formatToolResponse(result: BrazeResponse): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatSuccessResponse(result), null, 2) }],
+  };
+}
+
+/**
+ * Helper to format errors into MCP tool response format
+ */
+function formatToolError(error: unknown, toolName: string): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(formatErrorResponse(error, { tool: toolName }), null, 2) }],
+  };
+}
 
 const recipientSchema = z.object({
   external_user_id: z.string().optional(),
@@ -47,10 +63,12 @@ const messagesSchema = z.object({
 // messages_send - Send messages immediately
 // ========================================
 
-server.addTool({
-  name: "messages_send",
-  description: "Send messages immediately to users via push, email, webhook, or content cards.",
-  parameters: authSchema.extend({
+server.tool(
+  "messages_send",
+  "Send messages immediately to users via push, email, webhook, or content cards.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     broadcast: z.boolean().optional().describe("Send to entire segment"),
     external_user_ids: z.array(z.string()).optional().describe("User external IDs"),
     user_aliases: z.array(userAliasSchema).optional(),
@@ -61,19 +79,19 @@ server.addTool({
     override_frequency_capping: z.boolean().optional(),
     recipient_subscription_state: z.string().optional(),
     messages: messagesSchema.describe("Message content by channel"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("messages_send called", {
         recipientCount: (args.external_user_ids?.length || 0) + (args.user_aliases?.length || 0),
         broadcast: args.broadcast,
       });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/messages/send", {
+      const result = await client.request<BrazeResponse>("/messages/send", {
         body: {
           broadcast: args.broadcast,
           external_user_ids: args.external_user_ids,
@@ -90,37 +108,39 @@ server.addTool({
       });
 
       logger.info("messages_send completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "messages_send" }), null, 2);
+      return formatToolError(error, "messages_send");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // campaigns_trigger_send - Trigger API campaign
 // ========================================
 
-server.addTool({
-  name: "campaigns_trigger_send",
-  description: "Trigger an API-triggered campaign. The campaign must be configured as API-triggered in Braze.",
-  parameters: authSchema.extend({
+server.tool(
+  "campaigns_trigger_send",
+  "Trigger an API-triggered campaign. The campaign must be configured as API-triggered in Braze.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     campaign_id: z.string().describe("API-triggered campaign ID"),
     send_id: z.string().optional().describe("Custom send identifier"),
     trigger_properties: z.record(z.unknown()).optional().describe("Personalization properties"),
     broadcast: z.boolean().optional(),
     audience: audienceSchema,
     recipients: z.array(recipientSchema).optional().describe("Specific recipients"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("campaigns_trigger_send called", { campaignId: args.campaign_id });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/campaigns/trigger/send", {
+      const result = await client.request<BrazeResponse>("/campaigns/trigger/send", {
         body: {
           campaign_id: args.campaign_id,
           send_id: args.send_id,
@@ -133,36 +153,38 @@ server.addTool({
       });
 
       logger.info("campaigns_trigger_send completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "campaigns_trigger_send" }), null, 2);
+      return formatToolError(error, "campaigns_trigger_send");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // canvas_trigger_send - Trigger API Canvas
 // ========================================
 
-server.addTool({
-  name: "canvas_trigger_send",
-  description: "Trigger an API-triggered Canvas. The Canvas must be configured as API-triggered in Braze.",
-  parameters: authSchema.extend({
+server.tool(
+  "canvas_trigger_send",
+  "Trigger an API-triggered Canvas. The Canvas must be configured as API-triggered in Braze.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     canvas_id: z.string().describe("API-triggered Canvas ID"),
     canvas_entry_properties: z.record(z.unknown()).optional().describe("Entry properties"),
     broadcast: z.boolean().optional(),
     audience: audienceSchema,
     recipients: z.array(recipientSchema).optional(),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("canvas_trigger_send called", { canvasId: args.canvas_id });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/canvas/trigger/send", {
+      const result = await client.request<BrazeResponse>("/canvas/trigger/send", {
         body: {
           canvas_id: args.canvas_id,
           canvas_entry_properties: args.canvas_entry_properties,
@@ -174,21 +196,23 @@ server.addTool({
       });
 
       logger.info("canvas_trigger_send completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "canvas_trigger_send" }), null, 2);
+      return formatToolError(error, "canvas_trigger_send");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // transactional_email_send - Send transactional email
 // ========================================
 
-server.addTool({
-  name: "transactional_email_send",
-  description: "Send a transactional email via an API-triggered campaign. Used for order confirmations, password resets, etc.",
-  parameters: authSchema.extend({
+server.tool(
+  "transactional_email_send",
+  "Send a transactional email via an API-triggered campaign. Used for order confirmations, password resets, etc.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     campaign_id: z.string().describe("Transactional campaign ID"),
     external_send_id: z.string().optional().describe("Custom identifier for this send"),
     trigger_properties: z.record(z.unknown()).optional().describe("Email personalization data"),
@@ -197,16 +221,16 @@ server.addTool({
       user_alias: userAliasSchema.optional(),
       attributes: z.record(z.unknown()).optional(),
     }).describe("Single recipient for transactional email"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("transactional_email_send called", { campaignId: args.campaign_id });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request(`/transactional/v1/campaigns/${args.campaign_id}/send`, {
+      const result = await client.request<BrazeResponse>(`/transactional/v1/campaigns/${args.campaign_id}/send`, {
         body: {
           external_send_id: args.external_send_id,
           trigger_properties: args.trigger_properties,
@@ -216,33 +240,35 @@ server.addTool({
       });
 
       logger.info("transactional_email_send completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "transactional_email_send" }), null, 2);
+      return formatToolError(error, "transactional_email_send");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // send_id_create - Create send ID
 // ========================================
 
-server.addTool({
-  name: "send_id_create",
-  description: "Create a send ID for tracking message sends. Use to correlate sends with analytics.",
-  parameters: authSchema.extend({
+server.tool(
+  "send_id_create",
+  "Create a send ID for tracking message sends. Use to correlate sends with analytics.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     campaign_id: z.string().optional().describe("Campaign to create send ID for"),
     send_id: z.string().describe("Custom send identifier to create"),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("send_id_create called", { sendId: args.send_id });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/sends/id/create", {
+      const result = await client.request<BrazeResponse>("/sends/id/create", {
         body: {
           campaign_id: args.campaign_id,
           send_id: args.send_id,
@@ -251,21 +277,23 @@ server.addTool({
       });
 
       logger.info("send_id_create completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "send_id_create" }), null, 2);
+      return formatToolError(error, "send_id_create");
     }
-  },
-});
+  }
+);
 
 // ========================================
 // live_activity_update - Update iOS Live Activity
 // ========================================
 
-server.addTool({
-  name: "live_activity_update",
-  description: "Update an iOS Live Activity. Used for real-time updates like sports scores, delivery tracking.",
-  parameters: authSchema.extend({
+server.tool(
+  "live_activity_update",
+  "Update an iOS Live Activity. Used for real-time updates like sports scores, delivery tracking.",
+  {
+    apiKey: z.string().optional().describe("Braze REST API key"),
+    restEndpoint: z.string().optional().describe("Braze REST endpoint URL"),
     app_id: z.string().describe("Braze app ID"),
     activity_id: z.string().describe("Live Activity ID to update"),
     content_state: z.record(z.unknown()).describe("Updated content state"),
@@ -279,16 +307,16 @@ server.addTool({
         sound: z.string().optional(),
       }).optional(),
     }).optional(),
-  }),
-  execute: async (args, context: { session?: SessionData }) => {
+  },
+  async (args) => {
     try {
       logger.info("live_activity_update called", { activityId: args.activity_id });
 
-      const apiKey = extractApiKey(args, context);
-      const restEndpoint = extractRestEndpoint(args, context);
+      const apiKey = extractApiKey(args);
+      const restEndpoint = extractRestEndpoint(args);
       const client = new BrazeClient({ apiKey, restEndpoint });
 
-      const result = await client.request("/messages/live_activity/update", {
+      const result = await client.request<BrazeResponse>("/messages/live_activity/update", {
         body: {
           app_id: args.app_id,
           activity_id: args.activity_id,
@@ -302,9 +330,9 @@ server.addTool({
       });
 
       logger.info("live_activity_update completed");
-      return JSON.stringify({ success: true, ...(result as object) }, null, 2);
+      return formatToolResponse(result);
     } catch (error) {
-      return JSON.stringify(formatErrorResponse(error, { tool: "live_activity_update" }), null, 2);
+      return formatToolError(error, "live_activity_update");
     }
-  },
-});
+  }
+);

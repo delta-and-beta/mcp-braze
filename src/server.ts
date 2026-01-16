@@ -1,25 +1,19 @@
 /**
- * FastMCP Server Setup for Braze
+ * MCP Server Setup for Braze using official SDK
  */
 
-import { FastMCP } from "fastmcp";
-import type { IncomingHttpHeaders } from "http";
-import { logger } from "./lib/logger.js";
+import { createRequire } from "node:module";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-export interface SessionData {
-  headers: IncomingHttpHeaders;
-  [key: string]: unknown;
+interface PackageJson {
+  name: string;
+  version: string;
 }
 
-export const server = new FastMCP<SessionData>({
-  name: "mcp-braze",
-  version: "1.0.0",
-  authenticate: async (request): Promise<SessionData> => {
-    logger.info("New session authenticated");
-    return {
-      headers: request.headers,
-    };
-  },
-});
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as PackageJson;
 
-logger.info("MCP Braze server initialized");
+export const server = new McpServer({
+  name: pkg.name,
+  version: pkg.version,
+});
