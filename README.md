@@ -1,76 +1,99 @@
-# MCP Braze Server
+<div align="center">
 
-An MCP (Model Context Protocol) server that provides tools for interacting with the [Braze](https://www.braze.com/) customer engagement platform. This server enables AI assistants to manage users, send messages, schedule campaigns, and export analytics data.
+<br>
 
-## Features
+# MCP Braze
 
-- **User Management**: Track attributes, events, purchases; create/update aliases; merge profiles
-- **Messaging**: Send messages immediately via campaigns, canvases, or transactional email
-- **Scheduling**: Schedule and manage campaign/canvas sends with full lifecycle control
-- **Analytics & Exports**: Export campaign, canvas, segment, and KPI data
-- **Email & SMS**: Manage bounces, unsubscribes, blocklists, and invalid phone numbers
-- **Subscriptions**: Query and update subscription group status
-- **Templates**: Create and manage email templates and content blocks
-- **Catalogs**: Full CRUD operations on catalogs and catalog items
-- **Preference Centers**: Create and manage email preference centers
-- **SCIM**: Provision and manage dashboard users via SCIM 2.0
+<br>
 
-## Installation
+**Production-ready MCP server for Braze customer engagement**
+
+<br>
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Tests](https://img.shields.io/badge/Tests-280_passing-00D9C0?style=flat-square)](./src/__tests__)
+[![License](https://img.shields.io/badge/License-MIT-FF6B5B?style=flat-square)](./LICENSE)
+
+<br>
+
+*Built with the [MCP SDK](https://github.com/modelcontextprotocol/typescript-sdk) — Works with Claude Desktop & Claude.ai*
+
+<br>
+
+---
+
+<br>
+
+</div>
+
+## Overview
+
+A comprehensive MCP server enabling AI assistants to interact with Braze's customer engagement platform. Features **92 tools** covering user management, messaging, campaigns, analytics, email/SMS operations, catalogs, and SCIM provisioning—built for production reliability.
+
+<br>
+
+## Δ Capabilities
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Core
+
+**92 Tools** — Users, messaging, campaigns, analytics
+**Multi-Channel** — Push, email, SMS, in-app, webhooks
+**Header Auth** — Multi-tenant ready architecture
+
+</td>
+<td width="50%" valign="top">
+
+### Reliability
+
+**Circuit Breaker** — Cascading failure prevention
+**Auto-Retry** — Exponential backoff with jitter
+**Health Checks** — K8s liveness & readiness probes
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Security
+
+**Input Validation** — Zod schemas everywhere
+**Injection Prevention** — XSS & path attacks blocked
+**Rate Limiting** — Token bucket algorithm
+
+</td>
+<td width="50%" valign="top">
+
+### Performance
+
+**Request Queue** — Concurrency control (10 max)
+**Request Deduplication** — Shares concurrent results
+**Response Caching** — TTL-based with LRU eviction
+
+</td>
+</tr>
+</table>
+
+<br>
+
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/marchi-lau/mcp-braze.git
-cd mcp-braze
-
-# Install dependencies
-npm install
-
-# Build
-npm run build
+npm install && npm run build
+node dist/index.js
 ```
+
+<br>
 
 ## Configuration
 
-1. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Add your Braze credentials:
-   ```env
-   BRAZE_API_KEY=your-api-key-here
-   BRAZE_REST_ENDPOINT=https://rest.iad-01.braze.com
-   BRAZE_APP_ID=your-app-id-here  # Optional
-   ```
-
-3. Get your API key from the Braze Dashboard:
-   - Navigate to **Settings > API Keys**
-   - Create a new API key with the required permissions
-   - Select the appropriate REST endpoint for your instance
-
-### Braze REST Endpoints
-
-| Region | Endpoint |
-|--------|----------|
-| US-01 | `https://rest.iad-01.braze.com` |
-| US-02 | `https://rest.iad-02.braze.com` |
-| US-03 | `https://rest.iad-03.braze.com` |
-| US-04 | `https://rest.iad-04.braze.com` |
-| US-05 | `https://rest.iad-05.braze.com` |
-| US-06 | `https://rest.iad-06.braze.com` |
-| US-07 | `https://rest.iad-07.braze.com` |
-| US-08 | `https://rest.iad-08.braze.com` |
-| EU-01 | `https://rest.fra-01.braze.eu` |
-| EU-02 | `https://rest.fra-02.braze.eu` |
-
-## Usage
-
-### Claude Desktop
-
-Add to your Claude Desktop configuration file:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+<details>
+<summary><b>Claude Desktop (stdio)</b></summary>
+<br>
 
 ```json
 {
@@ -87,265 +110,296 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
-## Tools Reference
+</details>
 
-### User Data (8 tools)
+<details>
+<summary><b>Remote HTTP (mcp-remote)</b></summary>
+<br>
 
-| Tool | Description |
-|------|-------------|
-| `users_track` | Track user attributes, events, and purchases |
-| `users_identify` | Identify users by alias |
-| `users_alias_new` | Create new user aliases |
-| `users_alias_update` | Update existing user aliases |
-| `users_delete` | Delete user profiles |
-| `users_merge` | Merge duplicate user profiles |
-| `users_external_id_rename` | Rename external user IDs |
-| `users_external_id_remove` | Remove deprecated external IDs |
+```json
+{
+  "mcpServers": {
+    "braze": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://your-server.com/mcp",
+        "--header", "x-braze-api-key:your-api-key",
+        "--header", "x-braze-rest-endpoint:https://rest.iad-01.braze.com"
+      ]
+    }
+  }
+}
+```
 
-### Messaging (6 tools)
+</details>
 
-| Tool | Description |
-|------|-------------|
-| `messages_send` | Send messages immediately |
-| `campaigns_trigger_send` | Trigger API-triggered campaigns |
-| `canvas_trigger_send` | Trigger API-triggered canvases |
-| `transactional_email_send` | Send transactional emails |
-| `send_id_create` | Create send IDs for analytics |
-| `live_activity_update` | Update iOS Live Activities |
+<details>
+<summary><b>Claude.ai Web</b></summary>
+<br>
 
-### Scheduling (10 tools)
+1. Deploy server with HTTP transport
+2. Claude.ai → Settings → Connectors
+3. Add URL: `https://your-server.com/mcp`
+4. Add headers: `x-braze-api-key`, `x-braze-rest-endpoint`
 
-| Tool | Description |
-|------|-------------|
-| `scheduled_broadcasts_list` | List scheduled broadcasts |
-| `messages_schedule_create` | Schedule a message |
-| `messages_schedule_update` | Update a scheduled message |
-| `messages_schedule_delete` | Delete a scheduled message |
-| `campaigns_schedule_create` | Schedule an API campaign |
-| `campaigns_schedule_update` | Update a scheduled campaign |
-| `campaigns_schedule_delete` | Delete a scheduled campaign |
-| `canvas_schedule_create` | Schedule an API canvas |
-| `canvas_schedule_update` | Update a scheduled canvas |
-| `canvas_schedule_delete` | Delete a scheduled canvas |
+</details>
 
-### Exports & Analytics (24 tools)
+<br>
 
-| Tool | Description |
-|------|-------------|
-| `campaigns_list` | List all campaigns |
-| `campaigns_details` | Get campaign details |
-| `campaigns_analytics` | Get campaign analytics |
-| `sends_analytics` | Get send analytics |
-| `canvas_list` | List all canvases |
-| `canvas_details` | Get canvas details |
-| `canvas_analytics` | Get canvas analytics |
-| `canvas_summary` | Get canvas summary |
-| `segments_list` | List all segments |
-| `segments_details` | Get segment details |
-| `segments_analytics` | Get segment analytics |
-| `users_export` | Export users by IDs |
-| `users_export_segment` | Export users by segment |
-| `users_export_control_group` | Export global control group |
-| `kpi_dau` | Get daily active users |
-| `kpi_mau` | Get monthly active users |
-| `kpi_new_users` | Get new users data |
-| `kpi_uninstalls` | Get uninstall data |
-| `events_list` | List custom events |
-| `events_analytics` | Get event analytics |
-| `purchases_products` | List purchased products |
-| `purchases_quantity` | Get purchase quantities |
-| `purchases_revenue` | Get revenue data |
-| `sessions_analytics` | Get session analytics |
+| Platform | Config Path |
+|:---------|:------------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 
-### Email Management (7 tools)
+→ [Get your API key](https://dashboard.braze.com/app_settings/developer_console)
 
-| Tool | Description |
-|------|-------------|
-| `email_hard_bounces` | Query hard bounced emails |
-| `email_unsubscribes` | Query unsubscribed emails |
-| `email_subscription_status` | Update email subscription |
-| `email_bounce_remove` | Remove from bounce list |
-| `email_spam_remove` | Remove from spam list |
-| `email_blocklist` | Add to email blocklist |
-| `email_blacklist` | Add to blacklist (deprecated) |
+<br>
 
-### SMS Management (2 tools)
+## β Tools
 
-| Tool | Description |
-|------|-------------|
-| `sms_invalid_phones` | Query invalid phone numbers |
-| `sms_invalid_phones_remove` | Remove invalid phones |
+| Category | Tools |
+|:---------|:------|
+| **Users** | `users_track` · `users_identify` · `users_alias_new` · `users_alias_update` · `users_delete` · `users_merge` · `users_external_id_rename` · `users_external_id_remove` |
+| **Messaging** | `messages_send` · `campaigns_trigger_send` · `canvas_trigger_send` · `transactional_email_send` · `send_id_create` · `live_activity_update` |
+| **Scheduling** | `scheduled_broadcasts_list` · `messages_schedule_create` · `messages_schedule_update` · `messages_schedule_delete` · `campaigns_schedule_create` · `campaigns_schedule_update` · `campaigns_schedule_delete` · `canvas_schedule_create` · `canvas_schedule_update` · `canvas_schedule_delete` |
+| **Exports** | `campaigns_list` · `campaigns_details` · `campaigns_analytics` · `sends_analytics` · `canvas_list` · `canvas_details` · `canvas_analytics` · `canvas_summary` · `segments_list` · `segments_details` · `segments_analytics` · `users_export` · `users_export_segment` · `users_export_control_group` · `kpi_dau` · `kpi_mau` · `kpi_new_users` · `kpi_uninstalls` · `events_list` · `events_analytics` · `purchases_products` · `purchases_quantity` · `purchases_revenue` · `sessions_analytics` |
+| **Email** | `email_hard_bounces` · `email_unsubscribes` · `email_subscription_status` · `email_bounce_remove` · `email_spam_remove` · `email_blocklist` · `email_blacklist`° |
+| **SMS** | `sms_invalid_phones` · `sms_invalid_phones_remove` |
+| **Subscriptions** | `subscription_status_get` · `subscription_user_status` · `subscription_status_set` · `subscription_status_set_v2` |
+| **Templates** | `email_templates_list` · `email_templates_info` · `email_templates_create` · `email_templates_update` · `content_blocks_list` · `content_blocks_info` · `content_blocks_create` · `content_blocks_update` |
+| **Catalogs** | `catalogs_list` · `catalogs_create` · `catalogs_delete` · `catalog_items_list` · `catalog_items_create` · `catalog_items_update` · `catalog_items_edit` · `catalog_items_delete` · `catalog_item_get` · `catalog_item_create` · `catalog_item_update` · `catalog_item_edit` · `catalog_item_delete` |
+| **Preferences** | `preference_centers_list` · `preference_center_get` · `preference_center_url` · `preference_center_create` · `preference_center_update` |
+| **SCIM** | `scim_users_search` · `scim_users_get` · `scim_users_create` · `scim_users_update` · `scim_users_delete` |
 
-### Subscriptions (4 tools)
+° *Deprecated — use `email_blocklist` instead*
 
-| Tool | Description |
-|------|-------------|
-| `subscription_status_get` | Get subscription status |
-| `subscription_user_status` | Get user's subscription groups |
-| `subscription_status_set` | Update subscription status |
-| `subscription_status_set_v2` | Update status (v2 API) |
+<br>
 
-### Templates (8 tools)
+## Usage
 
-| Tool | Description |
-|------|-------------|
-| `email_templates_list` | List email templates |
-| `email_templates_info` | Get template details |
-| `email_templates_create` | Create email template |
-| `email_templates_update` | Update email template |
-| `content_blocks_list` | List content blocks |
-| `content_blocks_info` | Get content block details |
-| `content_blocks_create` | Create content block |
-| `content_blocks_update` | Update content block |
+```
+"Track a purchase event for user123 with amount $99.99"
 
-### Catalogs (13 tools)
+"Send the welcome campaign to users who signed up today"
 
-| Tool | Description |
-|------|-------------|
-| `catalogs_list` | List all catalogs |
-| `catalogs_create` | Create a catalog |
-| `catalogs_delete` | Delete a catalog |
-| `catalog_items_list` | List catalog items |
-| `catalog_items_create` | Create multiple items |
-| `catalog_items_update` | Update multiple items |
-| `catalog_items_edit` | Patch multiple items |
-| `catalog_items_delete` | Delete multiple items |
-| `catalog_item_get` | Get a single item |
-| `catalog_item_create` | Create a single item |
-| `catalog_item_update` | Update a single item |
-| `catalog_item_edit` | Patch a single item |
-| `catalog_item_delete` | Delete a single item |
+"Get campaign analytics for the last 30 days"
 
-### Preference Centers (5 tools)
+"List all users in the Premium segment"
 
-| Tool | Description |
-|------|-------------|
-| `preference_centers_list` | List preference centers |
-| `preference_center_get` | Get preference center details |
-| `preference_center_url` | Get user's preference center URL |
-| `preference_center_create` | Create preference center |
-| `preference_center_update` | Update preference center |
+"Create a new email template for order confirmations"
+```
 
-### SCIM (5 tools)
+<br>
 
-| Tool | Description |
-|------|-------------|
-| `scim_users_search` | Search dashboard users |
-| `scim_users_get` | Get dashboard user |
-| `scim_users_create` | Create dashboard user |
-| `scim_users_update` | Update dashboard user |
-| `scim_users_delete` | Delete dashboard user |
+## Authentication
 
-## Development
+| Priority | API Key | REST Endpoint |
+|:--------:|:--------|:--------------|
+| 1 | `x-braze-api-key` header | `x-braze-rest-endpoint` header |
+| 2 | `Authorization: Bearer` header | `restEndpoint` parameter |
+| 3 | `brazeApiKey` parameter | `BRAZE_REST_ENDPOINT` env |
+| 4 | `BRAZE_API_KEY` env | — |
+
+<br>
+
+## Braze REST Endpoints
+
+<details>
+<summary><b>Available Regions</b></summary>
+<br>
+
+| Region | Endpoint |
+|:-------|:---------|
+| US-01 | `https://rest.iad-01.braze.com` |
+| US-02 | `https://rest.iad-02.braze.com` |
+| US-03 | `https://rest.iad-03.braze.com` |
+| US-04 | `https://rest.iad-04.braze.com` |
+| US-05 | `https://rest.iad-05.braze.com` |
+| US-06 | `https://rest.iad-06.braze.com` |
+| US-07 | `https://rest.iad-07.braze.com` |
+| US-08 | `https://rest.iad-08.braze.com` |
+| EU-01 | `https://rest.fra-01.braze.eu` |
+| EU-02 | `https://rest.fra-02.braze.eu` |
+
+Find your endpoint in Braze Dashboard → Settings → APIs and Identifiers
+
+</details>
+
+<br>
+
+## Stability & Resilience
+
+<details>
+<summary><b>Retry with Exponential Backoff</b></summary>
+<br>
+
+- Auto-retries on HTTP 429, 500, 502, 503, 504
+- Handles network errors (ECONNRESET, ETIMEDOUT, ECONNREFUSED)
+- Respects `Retry-After` headers
+- Configurable max retries, delays, jitter
+
+</details>
+
+<details>
+<summary><b>Circuit Breaker Pattern</b></summary>
+<br>
+
+Prevents cascading failures:
+- **CLOSED** — Normal operation
+- **OPEN** — Fast-fail mode (5 failures trigger)
+- **HALF_OPEN** — Recovery testing
+
+</details>
+
+<details>
+<summary><b>Request Management</b></summary>
+<br>
+
+- **Timeout**: 30s default (AbortController)
+- **Deduplication**: Shares identical concurrent requests
+- **Queue**: Limits to 10 concurrent requests
+- **Rate Limiting**: Token bucket algorithm
+
+</details>
+
+<details>
+<summary><b>Health Checks</b></summary>
+<br>
+
+Kubernetes-ready probes:
+- `health` — Full status report
+- `liveness` — Alive check
+- `readiness` — Traffic ready
+
+</details>
+
+<br>
+
+## Deployment
+
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+COPY dist ./dist
+EXPOSE 3000
+CMD ["node", "dist/index.js"]
+```
 
 ```bash
-# Run in development mode
-npm run dev
-
-# Build TypeScript
-npm run build
-
-# Run tests
-npm test
-
-# Run E2E tests (requires API key)
-npm run test:e2e
-
-# Type checking
-npm run typecheck
-
-# Lint
-npm run lint
+docker build -t mcp-braze .
+docker run -p 3000:3000 \
+  -e BRAZE_API_KEY=your-key \
+  -e BRAZE_REST_ENDPOINT=https://rest.iad-01.braze.com \
+  mcp-braze
 ```
 
-## Examples
+<details>
+<summary><b>Environment Variables</b></summary>
+<br>
 
-### Track User Attributes
+```bash
+# Server
+PORT=3000
+NODE_ENV=production
 
-```javascript
-// Track a user's attributes and custom event
-await callTool("users_track", {
-  attributes: [{
-    external_id: "user123",
-    first_name: "John",
-    email: "john@example.com",
-    custom_attribute: "premium"
-  }],
-  events: [{
-    external_id: "user123",
-    name: "purchase_completed",
-    time: new Date().toISOString(),
-    properties: { item: "Pro Plan", amount: 99.99 }
-  }]
-});
+# Auth (prefer headers in production)
+BRAZE_API_KEY=
+BRAZE_REST_ENDPOINT=
+BRAZE_APP_ID=
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS_PER_SECOND=10
+
+# Caching
+CACHE_ENABLED=true
+CACHE_TTL_SECONDS=300
+CACHE_MAX_SIZE=1000
+
+# Circuit Breaker
+CIRCUIT_BREAKER_ENABLED=true
+CIRCUIT_BREAKER_THRESHOLD=5
+CIRCUIT_BREAKER_RESET_TIMEOUT=60000
+
+# Logging
+LOG_LEVEL=info
+
+# Sentry (Optional)
+SENTRY_DSN=
+SENTRY_ENVIRONMENT=production
 ```
 
-### Send a Campaign
+</details>
 
-```javascript
-// Trigger an API campaign
-await callTool("campaigns_trigger_send", {
-  campaign_id: "campaign_abc123",
-  recipients: [{
-    external_user_id: "user123",
-    trigger_properties: {
-      product_name: "Premium Subscription"
-    }
-  }]
-});
-```
-
-### Export Segment Users
-
-```javascript
-// Export users from a segment
-await callTool("users_export_segment", {
-  segment_id: "segment_xyz789",
-  fields_to_export: ["external_id", "email", "first_name"]
-});
-```
+<br>
 
 ## Architecture
 
 ```
 src/
-├── index.ts              # Entry point (STDIO transport)
-├── server.ts             # MCP server initialization
-├── tools/                # Tool definitions (92 tools across 11 files)
-│   ├── users.ts          # User data operations
-│   ├── messaging.ts      # Message sending
-│   ├── scheduling.ts     # Campaign/Canvas scheduling
-│   ├── exports.ts        # Data exports & analytics
-│   ├── email.ts          # Email management
-│   ├── sms.ts            # SMS operations
-│   ├── subscriptions.ts  # Subscription groups
-│   ├── templates.ts      # Template management
-│   ├── catalogs.ts       # Catalog operations
-│   ├── preference-center.ts # Preference centers
-│   └── scim.ts           # SCIM user provisioning
-└── lib/                  # Shared utilities (15 modules)
-    ├── auth.ts           # API key extraction
-    ├── client.ts         # Braze HTTP client
-    ├── errors.ts         # Error handling
-    ├── validation.ts     # Input validation
-    ├── logger.ts         # Logging utilities
-    ├── retry.ts          # Exponential backoff
-    ├── circuit-breaker.ts # Cascade failure prevention
-    ├── rate-limiter.ts   # Token bucket rate limiting
-    ├── cache.ts          # TTL-based caching
-    ├── request-queue.ts  # Concurrency control
-    ├── deduplication.ts  # Request deduplication
-    ├── idempotency.ts    # Safe retry tracking
-    ├── health.ts         # Kubernetes probes
-    └── sentry.ts         # Error tracking (optional)
+├── index.ts                 # Entry point
+├── server.ts                # MCP server init
+├── tools/                   # 92 tools
+│   ├── users.ts
+│   ├── messaging.ts
+│   ├── scheduling.ts
+│   ├── exports.ts
+│   ├── email.ts
+│   ├── sms.ts
+│   ├── subscriptions.ts
+│   ├── templates.ts
+│   ├── catalogs.ts
+│   ├── preference-center.ts
+│   └── scim.ts
+└── lib/                     # Core utilities
+    ├── auth.ts              # API key extraction
+    ├── client.ts            # Braze HTTP client
+    ├── validation.ts        # Zod schemas
+    ├── errors.ts            # Error handling
+    ├── retry.ts             # Backoff
+    ├── circuit-breaker.ts   # Failure prevention
+    ├── rate-limiter.ts      # Token bucket
+    ├── cache.ts             # TTL cache
+    ├── request-queue.ts     # Concurrency
+    ├── deduplication.ts     # Request dedup
+    ├── idempotency.ts       # Safe retries
+    ├── health.ts            # K8s probes
+    ├── logger.ts            # Structured logging
+    └── sentry.ts            # Error tracking
 ```
 
-## Testing
+**~3,500 lines** · **154 unit tests** · **126 e2e tests**
 
-- **Unit tests**: 154 tests across 8 files
-- **E2E tests**: 126 tests across 11 files
-- **Coverage target**: 90%+ on lib/
+<br>
 
-## License
+## References
 
-MIT
+| | |
+|:--|:--|
+| MCP Specification | [modelcontextprotocol.io](https://modelcontextprotocol.io/specification/2025-11-25) |
+| MCP SDK | [github.com/modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk) |
+| mcp-remote | [npmjs.com/package/mcp-remote](https://www.npmjs.com/package/mcp-remote) |
+| Braze API | [braze.com/docs/api](https://www.braze.com/docs/api/basics/) |
+
+<br>
+
+---
+
+<div align="center">
+
+<br>
+
+MIT License
+
+<br>
+
+**DELTΔ & βETΑ**
+
+*From Change to What's Next*
+
+<br>
+
+</div>
